@@ -194,7 +194,7 @@ int main(int argc, char** argv)
 				}
 			}
 		}
-		// close file ONLY on proc 0
+		// close file ONLY on proc 0 (otherwise procs > 0 will segfault at nil)
 		fclose(matfile_B);
 	}
 	else
@@ -215,6 +215,12 @@ int main(int argc, char** argv)
 	for (int stage=0; stage<q; ++stage)
 	// LOOP THROUGH THE STAGES OF THE ALGO
 	{
+		if ( ( (grid_index[1] + q)- (grid_index[0] +q) - stage)%q  == 0)
+		// Bcast A_local through the row
+		{
+			DEBUGPRINT("proc %d, active at stage %d\n", me, stage);
+			MPI_Bcast(A_local, dim_A_local[0]*dim_A_local[1], MPI_DOUBLE, me, row_comm);
+		}
 	}
 	MPI_Finalize();
 }
