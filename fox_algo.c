@@ -6,6 +6,8 @@
 
 #define BUFFSIZE 100
 
+#define DEBUGPRINT(_fmt, ...) fprintf(stderr, "[file: %s, line: %d] " _fmt, __FILE__, __LINE__, __VA_ARGS__)
+
 int main(int argc, char** argv)
 {
 	FILE *matfile_A,
@@ -84,21 +86,26 @@ int main(int argc, char** argv)
 	{
 		double *buffer = (double*) malloc(sizeof(double)*dim_A_local[1]);
 		double tmp;
-		for (int dest_row=0; dest_row<q; ++dest_row)
+		// please excuse me for the quadrouple-for loop, it's more readable this
+		// way ( it really is, I've tried and I am sorry )
+		for ( int dest_row=0; dest_row<q; ++dest_row )
 		{
-			for (int i=0; i<dim_A_local[0]; ++i)
+			for ( int i=0; i<dim_A_local[0]; ++i )
 			// loop through rows
 			{
 				int tag = i;
-				for (int dest_col=0; dest_col<q; ++dest_col)
+				for ( int dest_col=0; dest_col<q; ++dest_col )
 				{
-					for (int j=0; j<dim_A_local[1]; ++j)
+					for ( int j=0; j<dim_A_local[1]; ++j )
 					{
 						fgets(charbuffer, BUFFSIZE, matfile_A);
 						sscanf(charbuffer, "%lf", &tmp);
 						buffer[j] = tmp;
 					}
 					int dest = grid_dim[1]*dest_row+dest_col;
+#ifdef DEBUG
+					DEBUGPRINT("sending row %d, part %d to proc %d, content: %lf\n", i, dest_col, dest, buffer[0]);
+#endif
 					if ( dest != 0 )
 					{
 						MPI_Send(buffer, dim_A_local[1], MPI_DOUBLE, dest, tag, MPI_COMM_WORLD);
@@ -110,21 +117,104 @@ int main(int argc, char** argv)
 				}
 			}
 		}
+		// close file ONLY on proc 0
+		fclose(matfile_A);
 	}
 	else
 	// recieve local rows
 	{
-		for (int i=0; i<dim_A_local[0]; ++i)
+		for ( int i=0; i<dim_A_local[0]; ++i )
 		{
+#ifdef DEBUG
+			DEBUGPRINT("proc %d recieving row %d from 0\n", me, i);
+#endif
 			MPI_Recv(&A_local[i*dim_A_local[1]], dim_A_local[1], MPI_DOUBLE, 0, i, MPI_COMM_WORLD, &status);
 		}
 	}
 
-	for (int i=0; i<dim_A_local[0]*dim_A_local[1]; ++i)
+
+#ifdef DEBUG
+	for ( int i=0; i<dim_A_local[0]*dim_A_local[1]; ++i )
 	{
-		fprintf(stderr, "proc %d holds at pos %d: %lf\n", grid_me, i, A_local[i]);
+		DEBUGPRINT("proc %d holds at pos %d: %lf\n", grid_me, i, A_local[i]);
+	}
+#endif
+
+	// read matrix B
+	if ( me == 0 )
+	// read in matrix dimensions
+	{
+		matfile_B = fopen(argv[1], "r");
+		fgets(charbuffer, BUFFSIZE, matfile_B);
+		sscanf(charbuffer, "%d", &dim_B[0]);
+		fgets(charbuffer, BUFFSIZE, matfile_B);
+		sscanf(charbuffer, "%d", &dim_B[1]);
+	}
+	MPI_Bcast(dim_B, 2, MPI_INT, 0, MPI_COMM_WORLD);
+
+	// calculate local dimensions
+	dim_B_local[0] = dim_B[0]/q;
+	dim_B_local[1] = dim_B[1]/q;
+
+	B_local = (double*) malloc(sizeof(double)*dim_B_local[0]*dim_B_local[1]);
+
+	if ( me == 0 )
+	// read matrix B
+	{
+		double *buffer = (double*) malloc(sizeof(double)*dim_B_local[1]);
+		double tmp;
+		// please excuse me for the quadrouple-for loop, it's more readable this
+		// way ( it really is, I've tried and I am sorry )
+		for ( int dest_row=0; dest_row<q; ++dest_row )
+		{
+			for ( int i=0; i<dim_B_local[0]; ++i )
+			// loop through rows
+			{
+				int tag = i;
+				for ( int dest_col=0; dest_col<q; ++dest_col )
+				{
+					for ( int j=0; j<dim_B_local[1]; ++j )
+					{
+						fgets(charbuffer, BUFFSIZE, matfile_B);
+						sscanf(charbuffer, "%lf", &tmp);
+						buffer[j] = tmp;
+					}
+					int dest = grid_dim[1]*dest_row+dest_col;
+#ifdef DEBUG
+					DEBUGPRINT("sending row %d, part %d to proc %d, content: %lf\n", i, dest_col, dest, buffer[0]);
+#endif
+					if ( dest != 0 )
+					{
+						MPI_Send(buffer, dim_B_local[1], MPI_DOUBLE, dest, tag, MPI_COMM_WORLD);
+					}
+					else
+					{
+						memcpy(&B_local[dest_row*dim_B_local[1]], buffer, dim_B_local[1]);
+					}
+				}
+			}
+		}
+		// close file ONLY on proc 0
+		fclose(matfile_B);
+	}
+	else
+	// recieve local rows
+	{
+		for ( int i=0; i<dim_B_local[0]; ++i )
+		{
+#ifdef DEBUG
+			DEBUGPRINT("proc %d recieving row %d from 0\n", me, i);
+#endif
+			MPI_Recv(&B_local[i*dim_B_local[1]], dim_B_local[1], MPI_DOUBLE, 0, i, MPI_COMM_WORLD, &status);
+		}
 	}
 
-	// read in the matrix
+
+	// PERFORM THE MULTIPLICATION
+
+	for (int stage=0; stage<q; ++stage)
+	// LOOP THROUGH THE STAGES OF THE ALGO
+	{
+	}
 	MPI_Finalize();
 }
