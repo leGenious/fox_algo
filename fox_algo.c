@@ -210,17 +210,52 @@ int main(int argc, char** argv)
 	}
 
 
-	// PERFORM THE MULTIPLICATION
+	// allocate c_local and initialize it to zeros
+	C_local = (double*)calloc(sizeof(double),dim_A_local[0]*dim_B_local[1]);
+	double* tmp = (double*)malloc(sizeof(double)*dim_A_local[0]*dim_A_local[1]);
 
+	// PERFORM THE MULTIPLICATION
 	for (int stage=0; stage<q; ++stage)
 	// LOOP THROUGH THE STAGES OF THE ALGO
 	{
-		if ( ( (grid_index[1] + q)- (grid_index[0] +q) - stage)%q  == 0)
-		// Bcast A_local through the row
+		// determine active sender of a_local
+		int root = (grid_index[0]+stage)%q;
+		if ( grid_index[1] == root )
+			MPI_Bcast(A_local, dim_A_local[0]*dim_A_local[1], MPI_DOUBLE, root, row_comm);
+		else
+			MPI_Bcast(tmp, dim_A_local[0]*dim_A_local[1], MPI_DOUBLE, root, row_comm);
+		// do multiplication
+		// TODO: replace with blas call (if I can find a blas install on
+		// stromboli)
+		for (int i=0; i<dim_A_local[0]; ++i)
+		// loop through rows of A
 		{
-			DEBUGPRINT("proc %d, active at stage %d\n", me, stage);
-			MPI_Bcast(A_local, dim_A_local[0]*dim_A_local[1], MPI_DOUBLE, me, row_comm);
+			for (int j=0; j<dim_B_local[1]; ++j)
+			// loop through columns
+			{
+				for (int k=0; k<dim_B_local[0]; ++k)
+				{
+					// C(i,j) = sum_k A(i,k)*B(k,j);
+					if ( grid_index[1] == me )
+						C_local[i*dim_B_local[1]+j] +=
+							A_local[i*dim_A_local[1]+k]*B_local[k*dim_B_local[1]+j];
+					else
+						C_local[i*dim_B_local[1]+j] +=
+							tmp[i*dim_A_local[1]+k]*B_local[k*dim_B_local[1]+j];
+				}
+			}
 		}
+		// do circular shift of B_local upwards
+		int source = (grid_index[0]+1)%q;
+		int dest = (grid_index[0]-1+q)%q;	// idk why the mod operator in c works like this, but sadly it does
+		DEBUGPRINT("proc %d, stage %d\n", me, stage);
+		DEBUGPRINT("proc %d (%d,%d), source: %d: dest: %d\n", me, grid_index[0], grid_index[1], source, dest);
+		MPI_Sendrecv_replace(B_local, dim_B_local[0]*dim_B_local[1], MPI_DOUBLE, dest, stage, source, stage, col_comm, &status);
 	}
+
+	// TODO: regather the matrix and perform output
+	DEBUGPRINT("proc %d holds: %lf\n", me, C_local[0]);
+
+
 	MPI_Finalize();
 }

@@ -1,4 +1,4 @@
-MPICC=/cluster/mpi/openmpi/1.6.5-gcc4.4.7/bin/mpicc
+MPICC=mpicc
 MPICCFLAGS=-lm -O3 -std=c99
 MPIRUN=mpirun
 TARGET=fox_algo
