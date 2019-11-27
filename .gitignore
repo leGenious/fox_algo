@@ -1,5 +1,7 @@
 A.txt
 B.txt
 C.txt
+*.txt
+c.txt_result
 fox_algo
 compile_commands.json
