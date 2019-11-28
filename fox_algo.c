@@ -112,7 +112,7 @@ int main(int argc, char** argv)
 					}
 					else
 					{
-						memcpy(&A_local[dest_row*dim_A_local[1]], buffer, dim_A_local[1]);
+						memcpy(&A_local[dest_row*dim_A_local[1]], buffer, sizeof(double)*dim_A_local[1]);
 					}
 				}
 			}
@@ -189,7 +189,7 @@ int main(int argc, char** argv)
 					}
 					else
 					{
-						memcpy(&B_local[dest_row*dim_B_local[1]], buffer, dim_B_local[1]);
+						memcpy(&B_local[dest_row*dim_B_local[1]], buffer, sizeof(double)*dim_B_local[1]);
 					}
 				}
 			}
@@ -220,41 +220,51 @@ int main(int argc, char** argv)
 	{
 		// determine active sender of a_local
 		int root = (grid_index[0]+stage)%q;
+		// broadcast A_local through the row
 		if ( grid_index[1] == root )
-			MPI_Bcast(A_local, dim_A_local[0]*dim_A_local[1], MPI_DOUBLE, root, row_comm);
-		else
-			MPI_Bcast(tmp, dim_A_local[0]*dim_A_local[1], MPI_DOUBLE, root, row_comm);
+		{
+			DEBUGPRINT("stage %d: proc (%d,%d) holds A=%lf\n", stage, grid_index[0],grid_index[1], A_local[0]);
+			memcpy(tmp, A_local, sizeof(double)*dim_A_local[0]*dim_A_local[1]);
+			DEBUGPRINT("stage %d: proc (%d,%d) sent %lf\n", stage, grid_index[0],grid_index[1], tmp[0]);
+		}
+		MPI_Bcast(tmp, dim_A_local[0]*dim_A_local[1], MPI_DOUBLE, root, row_comm);
 		// do multiplication
 		// TODO: replace with blas call (if I can find a blas install on
 		// stromboli)
-		for (int i=0; i<dim_A_local[0]; ++i)
-		// loop through rows of A
-		{
-			for (int j=0; j<dim_B_local[1]; ++j)
-			// loop through columns
-			{
-				for (int k=0; k<dim_B_local[0]; ++k)
-				{
-					// C(i,j) = sum_k A(i,k)*B(k,j);
-					if ( grid_index[1] == me )
-						C_local[i*dim_B_local[1]+j] +=
-							A_local[i*dim_A_local[1]+k]*B_local[k*dim_B_local[1]+j];
-					else
-						C_local[i*dim_B_local[1]+j] +=
-							tmp[i*dim_A_local[1]+k]*B_local[k*dim_B_local[1]+j];
-				}
-			}
-		}
+
+//		for (int i=0; i<dim_A_local[0]; ++i)
+//		// loop through rows of C
+//		{
+//			for (int j=0; j<dim_B_local[1]; ++j)
+//			// loop elements of C
+//			{
+//				for (int k=0; k<dim_B_local[0]; ++k)
+//				{
+//					// C(i,j) = sum_k A(i,k)*B(k,j);
+//					if ( grid_index[1] == root )
+//					{
+//						C_local[i*dim_B_local[1]+j] +=
+//							A_local[i*dim_A_local[1]+k]*B_local[k*dim_B_local[1]+j];
+//						if (stage == 0)
+//					DEBUGPRINT("proc %d, stage %d: multiplying %lf by %lf to get %lf\n", me, stage, A_local[i*dim_A_local[1]+k], B_local[k*dim_B_local[1]+j], C_local[i*dim_B_local[1]+j]);
+//					}
+//					else
+//					{
+//						C_local[i*dim_B_local[1]+j] +=
+//							tmp[i*dim_A_local[1]+k]*B_local[k*dim_B_local[1]+j];
+//						if (stage == 0)
+//					DEBUGPRINT("proc %d, stage %d: multiplying %lf by %lf to get %lf\n", me, stage, tmp[i*dim_A_local[1]+k], B_local[k*dim_B_local[1]+j], C_local[i*dim_B_local[1]+j]);
+//					}
+//				}
+//			}
+//		}
 		// do circular shift of B_local upwards
 		int source = (grid_index[0]+1)%q;
 		int dest = (grid_index[0]-1+q)%q;	// idk why the mod operator in c works like this, but sadly it does
-		DEBUGPRINT("proc %d, stage %d\n", me, stage);
-		DEBUGPRINT("proc %d (%d,%d), source: %d: dest: %d\n", me, grid_index[0], grid_index[1], source, dest);
+//		DEBUGPRINT("proc %d (%d,%d), source: %d: dest: %d\n", me, grid_index[0], grid_index[1], source, dest);
 		MPI_Sendrecv_replace(B_local, dim_B_local[0]*dim_B_local[1], MPI_DOUBLE, dest, stage, source, stage, col_comm, &status);
 	}
 
-	// TODO: regather the matrix and perform output
-	DEBUGPRINT("proc %d holds: %lf\n", me, C_local[0]);
 
 
 	MPI_Finalize();
