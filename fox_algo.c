@@ -9,8 +9,6 @@
 
 #define DEBUGPRINT(_fmt, ...) fprintf(stderr, "[file: %s, line: %d] " _fmt, __FILE__, __LINE__, __VA_ARGS__)
 
-// TODO: fix the error with the read-in of the row>0 on processor 0
-
 int main(int argc, char** argv)
 {
 	FILE *matfile_A,
