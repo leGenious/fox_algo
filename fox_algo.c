@@ -1,13 +1,4 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <math.h>
-#include <string.h>
-#include "mpi.h"
-
-#define BUFFSIZE 100
-#define LEX(_i, _j, _dim) (_i*_dim[1]+_j) // had this idea way too late unfortunately
-
-#define DEBUGPRINT(_fmt, ...) fprintf(stderr, "[file: %s, line: %d] " _fmt, __FILE__, __LINE__, __VA_ARGS__)
+#include "fox_algo.h"
 
 int main(int argc, char** argv)
 {
@@ -66,21 +57,26 @@ int main(int argc, char** argv)
 #endif
 
 	if ( me == 0 )
-	// read in matrix dimensions
+	// read in A dimensions
 	{
 		matfile_A = fopen(argv[1], "r");
-		fgets(charbuffer, BUFFSIZE, matfile_A);
-		sscanf(charbuffer, "%d", &dim_A[0]);
-		fgets(charbuffer, BUFFSIZE, matfile_A);
-		sscanf(charbuffer, "%d", &dim_A[1]);
+	  	matfile_B = fopen(argv[2], "r");
 	}
-	MPI_Bcast(dim_A, 2, MPI_INT, 0, MPI_COMM_WORLD);
+	read_dimensions(matfile_A, dim_A, me, np);
 
 	// calculate local dimensions
 	dim_A_local[0] = dim_A[0]/q;
 	dim_A_local[1] = dim_A[1]/q;
 
 	A_local = (double*) malloc(sizeof(double)*dim_A_local[0]*dim_A_local[1]);
+
+	read_dimensions(matfile_B, dim_B, me, np);
+
+	// calculate local dimensions
+	dim_B_local[0] = dim_B[0]/q;
+	dim_B_local[1] = dim_B[1]/q;
+
+	B_local = (double*) malloc(sizeof(double)*dim_B_local[0]*dim_B_local[1]);
 
 	if ( me == 0 )
 	// read matrix A
@@ -142,22 +138,6 @@ int main(int argc, char** argv)
 #endif
 
 	// read matrix B
-	if ( me == 0 )
-	// read in matrix dimensions
-	{
-		matfile_B = fopen(argv[1], "r");
-		fgets(charbuffer, BUFFSIZE, matfile_B);
-		sscanf(charbuffer, "%d", &dim_B[0]);
-		fgets(charbuffer, BUFFSIZE, matfile_B);
-		sscanf(charbuffer, "%d", &dim_B[1]);
-	}
-	MPI_Bcast(dim_B, 2, MPI_INT, 0, MPI_COMM_WORLD);
-
-	// calculate local dimensions
-	dim_B_local[0] = dim_B[0]/q;
-	dim_B_local[1] = dim_B[1]/q;
-
-	B_local = (double*) malloc(sizeof(double)*dim_B_local[0]*dim_B_local[1]);
 
 	if ( me == 0 )
 	// read matrix B
@@ -239,7 +219,6 @@ int main(int argc, char** argv)
 		{
 			memcpy(tmp, A_local, sizeof(double)*dim_A_local[0]*dim_A_local[1]);
 			//for (int i=0; i<dim_A_local[0]*dim_A_local[1]; ++i)
-			//DEBUGPRINT("proc %d, stage %d sending A[%d]=%lf\n", me, stage, i, tmp[0]);
 		}
 		MPI_Bcast(tmp, dim_A_local[0]*dim_A_local[1], MPI_DOUBLE, root, row_comm);
 		// do multiplication
@@ -260,7 +239,6 @@ int main(int argc, char** argv)
 		// do circular shift of B_local upwards
 		int source = (grid_index[0]+1)%q;
 		int dest = (grid_index[0]-1+q)%q;
-//		DEBUGPRINT("proc %d (%d,%d), source: %d: dest: %d\n", me, grid_index[0], grid_index[1], source, dest);
 		MPI_Sendrecv_replace(B_local, dim_B_local[0]*dim_B_local[1], MPI_DOUBLE, dest, stage, source, stage, col_comm, &status);
 	}
 
@@ -278,6 +256,8 @@ int main(int argc, char** argv)
 		matfile_C = fopen(argv[3], "w");
 		fprintf(matfile_C, "%d\n", dim_A[0]);
 		fprintf(matfile_C, "%d\n", dim_B[1]);
+		DEBUGPRINT("B is %dx%d\n", dim_B[0], dim_B[1]);
+		DEBUGPRINT("A is %dx%d\n", dim_A[0], dim_A[1]);
 	}
 
 	if ( grid_index[1] == 0 )
@@ -314,7 +294,6 @@ int main(int argc, char** argv)
 				// send row to proc 0
 				{
 					int row_num = i+block_row*dim_C_local[0];
-					DEBUGPRINT("proc %d, sending message %d\n", me, row_num);
 					MPI_Send(tmp, dim_B[1], MPI_DOUBLE, 0, row_num, col_comm);
 				}
 			}
@@ -324,7 +303,6 @@ int main(int argc, char** argv)
 		{
 			for (int i=0; i<dim_C_local[0]; ++i)
 			{
-				DEBUGPRINT("proc %d, recieving message no %d from %d\n", me, i+block_row*dim_C_local[0], block_row);
 				MPI_Recv(tmp, dim_B[1], MPI_DOUBLE, block_row, i+block_row*dim_C_local[0], col_comm, &status);
 				for (int j=0; j<dim_B[1]; ++j)
 				{
