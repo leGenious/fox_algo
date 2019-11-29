@@ -210,6 +210,8 @@ int main(int argc, char** argv)
 		}
 	}
 
+
+#ifdef DEBUG
 	for (int i=0; i<dim_A_local[0]*dim_A_local[1]; ++i)
 	{
 		DEBUGPRINT("proc %d A[%d]=%lf\n", me, i, A_local[i]);
@@ -218,7 +220,7 @@ int main(int argc, char** argv)
 	{
 		DEBUGPRINT("proc %d B[%d]=%lf\n", me, i, B_local[i]);
 	}
-
+#endif
 
 	// allocate c_local and initialize it to zeros
 	C_local = (double*)calloc(sizeof(double),dim_A_local[0]*dim_B_local[1]);
@@ -241,8 +243,6 @@ int main(int argc, char** argv)
 		}
 		MPI_Bcast(tmp, dim_A_local[0]*dim_A_local[1], MPI_DOUBLE, root, row_comm);
 		// do multiplication
-		// TODO: correct local multiplication
-
 		for (int i=0; i<dim_A_local[0]; ++i)
 		// loop through rows of C
 		{
@@ -254,7 +254,6 @@ int main(int argc, char** argv)
 					// C(i,j) = sum_k A(i,k)*B(k,j);
 					C_local[i*dim_B_local[1]+j] +=
 						tmp[i*dim_A_local[1]+k]*B_local[k*dim_B_local[1]+j];
-					//DEBUGPRINT("proc %d, stage %d: multiplying %lf by %lf to get %lf\n", me, stage, tmp[i*dim_A_local[1]+k], B_local[k*dim_B_local[1]+j], C_local[i*dim_B_local[1]+j]);
 				}
 			}
 		}
@@ -265,13 +264,75 @@ int main(int argc, char** argv)
 		MPI_Sendrecv_replace(B_local, dim_B_local[0]*dim_B_local[1], MPI_DOUBLE, dest, stage, source, stage, col_comm, &status);
 	}
 
+#ifdef DEBUG
 	for (int i=0; i<dim_A_local[0]*dim_B_local[1]; ++i)
 	{
 		DEBUGPRINT("proc %d has C[%d]=%lf\n", me, i, C_local[i]);
 	}
+#endif
 
-	// TODO: regather C into proc 0 and perform the output
+	// PERFORM OUTPUT
+	if ( me == 0 )
+	// print matrix C dimensions
+	{
+		matfile_C = fopen(argv[3], "w");
+		fprintf(matfile_C, "%d\n", dim_A[0]);
+		fprintf(matfile_C, "%d\n", dim_B[1]);
+	}
 
+	if ( grid_index[1] == 0 )
+		tmp = realloc(tmp, sizeof(double)*dim_B[1]); // one row of C
+	else
+		free(tmp);
+
+	if ( grid_index[0] == 0 )
+	{
+		for (int i=0; i<dim_C_local[0]; ++i)
+		// loop through the first block row
+		{
+			// Gather row i in proc 0
+			MPI_Gather(&C_local[i*dim_C_local[1]], dim_C_local[1], MPI_DOUBLE, tmp, dim_C_local[1], MPI_DOUBLE, 0, row_comm);
+			if ( me == 0 )
+			{
+				for (int j=0; j<dim_B[1]; ++j)
+				{
+					fprintf(matfile_C, "%lf\n", tmp[j]);
+				}
+			}
+		}
+	}
+
+	for (int block_row=1; block_row<q; ++block_row)
+	{
+		if ( grid_index[0] == block_row )
+		// gather individual rows
+		{
+			for (int i=0; i<dim_C_local[0]; ++i)
+			{
+				MPI_Gather(&C_local[i*dim_C_local[1]], dim_C_local[1], MPI_DOUBLE, tmp, dim_C_local[1], MPI_DOUBLE, 0, row_comm);
+				if ( grid_index[1] == 0 )
+				// send row to proc 0
+				{
+					int row_num = i+block_row*dim_C_local[0];
+					DEBUGPRINT("proc %d, sending message %d\n", me, row_num);
+					MPI_Send(tmp, dim_B[1], MPI_DOUBLE, 0, row_num, col_comm);
+				}
+			}
+		}
+		else if ( grid_index[1] == 0 )
+		// recieve individual rows from proc block_row
+		{
+			for (int i=0; i<dim_C_local[0]; ++i)
+			{
+				DEBUGPRINT("proc %d, recieving message no %d from %d\n", me, i+block_row*dim_C_local[0], block_row);
+				MPI_Recv(tmp, dim_B[1], MPI_DOUBLE, block_row, i+block_row*dim_C_local[0], col_comm, &status);
+				for (int j=0; j<dim_B[1]; ++j)
+				{
+					fprintf(matfile_C, "%lf\n", tmp[j]);
+				}
+			}
+		}
+	}
 
 	MPI_Finalize();
 }
