@@ -77,3 +77,17 @@ void read_matrix(FILE* file, double* mat_local, int* dim, int* dim_local, int me
 		}
 	}
 }
+
+void calc_local_dimensions(int* dim_local, int*dim, int q)
+{
+	dim_local[0] = dim[0]/q;
+	dim_local[1] = dim[1]/q;
+
+	for (int i=0; i<2; ++i)
+	{
+		if ( dim_local[i]*q != dim[i] )
+		{
+			dim_local[i] += dim_local[i] % q;
+		}
+	}
+}

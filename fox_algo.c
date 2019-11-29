@@ -63,19 +63,17 @@ int main(int argc, char** argv)
 	read_dimensions(matfile_A, dim_A, me);
 	read_dimensions(matfile_B, dim_B, me);
 
-	// calculate local dimensions of A
-	dim_A_local[0] = dim_A[0]/q;
-	dim_A_local[1] = dim_A[1]/q;
+	calc_local_dimensions(dim_A_local, dim_A, q);
+	calc_local_dimensions(dim_B_local, dim_B, q);
 
-	// calculate local dimensions of B
-	dim_B_local[0] = dim_B[0]/q;
-	dim_B_local[1] = dim_B[1]/q;
-
+	// allocate and init local matrices to 0
 	B_local = (double*) malloc(sizeof(double)*dim_B_local[0]*dim_B_local[1]);
 	A_local = (double*) malloc(sizeof(double)*dim_A_local[0]*dim_A_local[1]);
 
-	read_matrix(matfile_A, A_local, dim_A, dim_A_local, me, grid_dim, q);
+	memset(B_local, '\0', sizeof(double)*dim_B_local[0]*dim_B_local[1]);
+	memset(A_local, '\0', sizeof(double)*dim_A_local[0]*dim_A_local[1]);
 
+	read_matrix(matfile_A, A_local, dim_A, dim_A_local, me, grid_dim, q);
 	read_matrix(matfile_B, B_local, dim_B, dim_B_local, me, grid_dim, q);
 
 #ifdef DEBUG
