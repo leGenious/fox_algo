@@ -1,0 +1,1 @@
+fox_algo.o fox_algo.dep : fox_algo.c fox_algo.h
