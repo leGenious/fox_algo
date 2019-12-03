@@ -118,8 +118,7 @@ int main(int argc, char** argv)
 			col_comm);
 #endif
 #ifdef TIMEIT
-	double time =
-	fox_matmulmat(C_local,
+	double time = fox_matmulmat_timed(C_local,
 			A_local,
 			B_local,
 			dim_local,
@@ -127,6 +126,18 @@ int main(int argc, char** argv)
 			grid_index,
 			row_comm,
 			col_comm);
+	if ( access( "timings.log", F_OK) != -1)
+	{
+		FILE* timings = fopen("timings.log", "a");
+		fprintf(timings, "");
+	}
+	else
+	{
+		FILE* timings = fopen("timings.log", "w");
+		fprintf(timings, "nprocs,m,k,n,calc\n");
+		fprintf(timings, "%d,%d,%d,%d,%lf\n", np, dim_A[0], dim_A[1], dim_B[1], time);
+	}
+
 #endif
 
 #ifdef DEBUG

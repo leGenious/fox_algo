@@ -10,7 +10,10 @@ MAKEDEP = mpicc -MM
 
 LD_LIBRARY_PATH = /opt/OpenBLAS/lib
 
-all: debug
+time: $(SRC)
+	$(MPICC) $(MPICCFLAGS) $(LFLAGS) -o $(TARGET) -DTIMEIT $^
+
+all: $(TARGET)
 
 debug: $(SRC)
 	$(MPICC) $(MPICCFLAGS) $(LFLAGS) -o $(TARGET) -g -DDEBUG $^

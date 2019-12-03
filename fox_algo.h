@@ -5,6 +5,7 @@
 #include <string.h>
 #include "mpi.h"
 #include <cblas.h>
+#include <unistd.h>
 
 #define BUFFSIZE 100
 #define LEX(_i, _j, _dim) (_i*_dim[1]+_j) // had this idea way too late unfortunately
@@ -94,7 +95,15 @@ void fox_matmulmat(double* C_local, // [out] output local matrix
 		// do circular shift of B_local upwards
 		int source = (grid_index[0]+1)%q;
 		int dest = (grid_index[0]-1+q)%q;
-		MPI_Sendrecv_replace(B_local, dim_local[1]*dim_local[2], MPI_DOUBLE, dest, stage, source, stage, col_comm, &status);
+		MPI_Sendrecv_replace(B_local,
+				dim_local[1]*dim_local[2],
+				MPI_DOUBLE,
+				dest,
+				stage,
+				source,
+				stage,
+				col_comm,
+				&status);
 	}
 }
 
