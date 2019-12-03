@@ -11,10 +11,17 @@
 
 #define DEBUGPRINT(_fmt, ...) fprintf(stderr, "[file: %s, line: %d] " _fmt, __FILE__, __LINE__, __VA_ARGS__)
 
+void write_matrix(FILE* file, double* mat_local, int* dim, int* dim_local, int* grid_index, int me, int q, MPI_Comm row_comm, MPI_Comm col_comm);
+void read_dimensions(FILE* file, int* dim, int me);
+void fox_matmulmat(double* C_local, double* A_local, double* B_local, int* dim_local, int q, int* grid_index, MPI_Comm row_comm, MPI_Comm col_comm);
+void calc_local_dimensions(int* dim_local, int*dim, int q);
+double fox_matmulmat_timed(double* C_local, double* A_local, double* B_local, int* dim_local, int q, int* grid_index, MPI_Comm row_comm, MPI_Comm col_comm);
+void read_matrix(FILE* file, double* mat_local, int* dim, int* dim_local, int me, int q);
 
-void read_dimensions(FILE* file,
-		int* dim,
-		int me)
+
+void read_dimensions(FILE* file,	// [in] file to be read
+		int* dim,					// [out] dimensions
+		int me)						// [in] index of the processor
 {
 	char buffer[BUFFSIZE];
 	if ( me == 0 )
@@ -27,14 +34,14 @@ void read_dimensions(FILE* file,
 	MPI_Bcast(dim, 2, MPI_INT, 0, MPI_COMM_WORLD);
 }
 
-void fox_matmulmat(double* C_local,
-		double* A_local,
-		double* B_local,
-		int* dim_local,
-		int q,
-		int *grid_index,
-		MPI_Comm row_comm,
-		MPI_Comm col_comm)
+void fox_matmulmat(double* C_local, // [out] output local matrix
+		double* A_local,			// [in] first multiplicant
+		double* B_local,			// [in] first multiplicant
+		int* dim_local,				// [in] dimensions of the local matrix [3]
+		int q,						// [in] dimension of the (sqare) processor grid
+		int *grid_index,			// [in] index of the processor on the grid [2]
+		MPI_Comm row_comm,			// [in] a row communicator on the grid
+		MPI_Comm col_comm)			// [in] a col communicator on the grid
 {
 	MPI_Status status;
 	double* tmp = (double*)malloc(sizeof(double)*dim_local[0]*dim_local[1]);
@@ -46,38 +53,43 @@ void fox_matmulmat(double* C_local,
 		int root = (grid_index[0]+stage)%q;
 		// broadcast A_local through the row
 		if ( grid_index[1] == root )
-		{
-			memcpy(tmp, A_local, sizeof(double)*dim_local[0]*dim_local[1]);
-		}
-		MPI_Bcast(tmp, dim_local[0]*dim_local[1], MPI_DOUBLE, root, row_comm);
+			MPI_Bcast(A_local, dim_local[0]*dim_local[1], MPI_DOUBLE, root, row_comm);
+		else
+			MPI_Bcast(tmp, dim_local[0]*dim_local[1], MPI_DOUBLE, root, row_comm);
 		// do multiplication
-//		cblas_dgemm(CblasRowMajor,
-//				CblasNoTrans,
-//				CblasNoTrans,
-//				dim_local[0],
-//				dim_local[2],
-//				dim_local[1],
-//				1,
-//				A_local,
-//				dim_local[1],
-//				B_local,
-//				dim_local[2],
-//				1,
-//				C_local,
-//				dim_local[2]);
-		for (int i=0; i<dim_local[0]; ++i)
-		// loop through rows of C
+		if ( grid_index[1] != root )
 		{
-			for (int j=0; j<dim_local[2]; ++j)
-			// loop elements of C
-			{
-				for (int k=0; k<dim_local[1]; ++k)
-				{
-					// C(i,j) = sum_k A(i,k)*B(k,j);
-					C_local[i*dim_local[2]+j] +=
-						tmp[i*dim_local[1]+k]*B_local[k*dim_local[2]+j];
-				}
-			}
+		cblas_dgemm(CblasRowMajor,
+				CblasNoTrans,
+				CblasNoTrans,
+				dim_local[0],
+				dim_local[2],
+				dim_local[1],
+				1,
+				tmp,
+				dim_local[1],
+				B_local,
+				dim_local[2],
+				1,
+				C_local,
+				dim_local[2]);
+		}
+		else
+		{
+		cblas_dgemm(CblasRowMajor,
+				CblasNoTrans,
+				CblasNoTrans,
+				dim_local[0],
+				dim_local[2],
+				dim_local[1],
+				1,
+				A_local,
+				dim_local[1],
+				B_local,
+				dim_local[2],
+				1,
+				C_local,
+				dim_local[2]);
 		}
 		// do circular shift of B_local upwards
 		int source = (grid_index[0]+1)%q;
@@ -86,13 +98,39 @@ void fox_matmulmat(double* C_local,
 	}
 }
 
-void read_matrix(FILE* file,
-		double* mat_local,
-		int* dim,
-		int* dim_local,
-		int me,
-		int* grid_dim,
-		int q)
+double fox_matmulmat_timed(
+		double* C_local,			// [out] output local matrix
+		double* A_local,            // [in] first multiplicant
+		double* B_local,            // [in] first multiplicant
+		int* dim_local,             // [in] dimensions of the local matrix [2]
+		int q,                      // [in] dimension of the (sqare) processor grid
+		int* grid_index,            // [in] index of the processor on the grid [2]
+		MPI_Comm row_comm,          // [in] a row communicator on the grid
+		MPI_Comm col_comm)          // [in] a col communicator on the grid
+	// return the walltime of the implementation
+{
+	MPI_Barrier(MPI_COMM_WORLD);
+	double time = MPI_Wtime();
+	fox_matmulmat(C_local,
+			A_local,
+			B_local,
+			dim_local,
+			q,
+			grid_index,
+			row_comm,
+			col_comm);
+	MPI_Barrier(MPI_COMM_WORLD);
+	time = MPI_Wtime() - time;
+	return time;
+}
+
+void read_matrix(
+		FILE* file,					// [in] file to be read
+		double* mat_local,			// [out] local matrix part to be filled
+		int* dim,					// [in] dimensions of the matrix [2]
+		int* dim_local,				// [in] dimensions of the local part [2]
+		int me,						// [in] my rank
+		int q)						// [in] size of the processor grid
 {
 	char strbuffer[BUFFSIZE];
 	MPI_Status status;
@@ -117,7 +155,7 @@ void read_matrix(FILE* file,
 						sscanf(strbuffer, "%lf", &tmp);
 						buffer[j] = tmp;
 					}
-					int dest = grid_dim[1]*dest_row+dest_col;
+					int dest = q*dest_row+dest_col;
 #ifdef DEBUG
 					DEBUGPRINT("sending row %d, part %d to proc %d, content: %lf\n", i, dest_col, dest, buffer[0]);
 #endif
@@ -146,9 +184,10 @@ void read_matrix(FILE* file,
 	}
 }
 
-void calc_local_dimensions(int* dim_local,
-		int*dim,
-		int q)
+void calc_local_dimensions(
+		int* dim_local,				// [out] local matrix part dimension
+		int*dim,					// [in] global matrix dimension
+		int q)						// [in] size of the processor grid
 {
 	dim_local[0] = dim[0]/q;
 	dim_local[1] = dim[1]/q;
@@ -162,15 +201,16 @@ void calc_local_dimensions(int* dim_local,
 	}
 }
 
-void write_matrix(FILE* file,
-		double* mat_local,
-		int* dim,
-		int* dim_local,
-		int* grid_index,
-		int me,
-		int q,
-		MPI_Comm row_comm,
-		MPI_Comm col_comm)
+void write_matrix(
+		FILE* file,					// [in] file to be written to
+		double* mat_local,			// [in] local matrix to be written
+		int* dim,					// [in] dimension of the matrix [2]
+		int* dim_local,				// [in] dimension of the local parts
+		int* grid_index,			// [in] index of the processors on the grid
+		int me,						// [in] global proecssor rank
+		int q,						// [in] size of the processor grid
+		MPI_Comm row_comm,			// [in] a communicator through the rows of the grid
+		MPI_Comm col_comm)			// [in] a communicator through the cols of the grid
 {
 	MPI_Status status;
 	double * tmp;
@@ -202,7 +242,6 @@ void write_matrix(FILE* file,
 				}
 			}
 		}
-	DEBUGPRINT("proc %d performing output of first block row\n", me);
 	}
 
 
@@ -221,7 +260,6 @@ void write_matrix(FILE* file,
 					MPI_Send(tmp, dim[1], MPI_DOUBLE, 0, row_num, col_comm);
 				}
 			}
-			DEBUGPRINT("proc %d performing output\n", me);
 		}
 		else if ( grid_index[1] == 0 )
 		// recieve individual rows from proc block_row

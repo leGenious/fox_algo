@@ -40,7 +40,8 @@ int main(int argc, char** argv)
 
 	// crash (kind of) gracefully when q is not an int
 	if ( floor(sqrtf( (double)np )) != q )
-		return -1;
+		MPI_Finalize();
+
 
 	// Create the grid Comm and the row_comms
 	grid_dim[0] = grid_dim[1] = q;
@@ -77,8 +78,8 @@ int main(int argc, char** argv)
 	memset(B_local, '\0', sizeof(double)*dim_B_local[0]*dim_B_local[1]);
 	memset(A_local, '\0', sizeof(double)*dim_A_local[0]*dim_A_local[1]);
 
-	read_matrix(matfile_A, A_local, dim_A, dim_A_local, me, grid_dim, q);
-	read_matrix(matfile_B, B_local, dim_B, dim_B_local, me, grid_dim, q);
+	read_matrix(matfile_A, A_local, dim_A, dim_A_local, me, q);
+	read_matrix(matfile_B, B_local, dim_B, dim_B_local, me, q);
 
 #ifdef DEBUG
 	for (int i=0; i<dim_A_local[0]*dim_A_local[1]; ++i)
@@ -106,6 +107,7 @@ int main(int argc, char** argv)
 		fclose(matfile_A);
 	}
 
+#ifndef TIMEIT
 	fox_matmulmat(C_local,
 			A_local,
 			B_local,
@@ -114,6 +116,18 @@ int main(int argc, char** argv)
 			grid_index,
 			row_comm,
 			col_comm);
+#endif
+#ifdef TIMEIT
+	double time =
+	fox_matmulmat(C_local,
+			A_local,
+			B_local,
+			dim_local,
+			q,
+			grid_index,
+			row_comm,
+			col_comm);
+#endif
 
 #ifdef DEBUG
 	for (int i=0; i<dim_A_local[0]*dim_B_local[1]; ++i)
