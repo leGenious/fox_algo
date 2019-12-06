@@ -150,7 +150,7 @@ void read_matrix(
 		double tmp;
 		// please excuse me for the quadrouple-for loop, it's more readable this
 		// way
-		for ( int dest_row=0; dest_row<q; ++dest_row )
+		for ( int dest_proc_row=0; dest_proc_row<q; ++dest_proc_row )
 		{
 			for ( int i=0; i<dim_local[0]; ++i )
 			// loop through rows
@@ -158,13 +158,24 @@ void read_matrix(
 				int tag = i;
 				for ( int dest_col=0; dest_col<q; ++dest_col )
 				{
-					for ( int j=0; j<dim_local[1]; ++j )
+					// init the buffer to 0
+					memset(buffer, '\0', sizeof(double)*dim_local[1]);
+					if ( dim[0] > i + dest_proc_row*dim_local[0] )
 					{
-						fgets(strbuffer, BUFFSIZE, file);
-						sscanf(strbuffer, "%lf", &tmp);
-						buffer[j] = tmp;
+						for ( int j=0; j<dim_local[1]; ++j )
+						{
+							if (dim[1] > j+ dest_col*dim_local[1])
+							// only read to local row, if total row is not fully
+							// read already
+							{
+								fgets(strbuffer, BUFFSIZE, file);
+								sscanf(strbuffer, "%lf", &tmp);
+								buffer[j] = tmp;
+							}
+							// DEBUGPRINT("reading element %d:%lf\n", j+dest_col*dim_local[1], buffer[j]);
+						}
 					}
-					int dest = q*dest_row+dest_col;
+					int dest = q*dest_proc_row+dest_col;
 #ifdef DEBUG
 					DEBUGPRINT("sending row %d, part %d to proc %d, content: %lf\n", i, dest_col, dest, buffer[0]);
 #endif
@@ -179,6 +190,7 @@ void read_matrix(
 				}
 			}
 		}
+		free(buffer);
 	}
 	else
 	// recieve local rows

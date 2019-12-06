@@ -39,9 +39,11 @@ int main(int argc, char** argv)
 	int q = (int)sqrt(np); // size of the qxq processor grid
 
 	// crash (kind of) gracefully when q is not an int
-	if ( floor(sqrtf( (double)np )) != q )
+	if ( floor(sqrtf( (double)np )) != sqrtf( (double)np ) )
+	{
 		MPI_Finalize();
-
+		return -1;
+	}
 
 	// Create the grid Comm and the row_comms
 	grid_dim[0] = grid_dim[1] = q;
@@ -71,6 +73,8 @@ int main(int argc, char** argv)
 	calc_local_dimensions(dim_A_local, dim_A, q);
 	calc_local_dimensions(dim_B_local, dim_B, q);
 
+	DEBUGPRINT("proc %d: local dim_A: %d,%d, local_dim_B: %d,%d\n", me, dim_A_local[0], dim_A_local[1], dim_B_local[0], dim_B_local[1]);
+
 	// allocate and init local matrices to 0
 	B_local = (double*) malloc(sizeof(double)*dim_B_local[0]*dim_B_local[1]);
 	A_local = (double*) malloc(sizeof(double)*dim_A_local[0]*dim_A_local[1]);
@@ -81,16 +85,16 @@ int main(int argc, char** argv)
 	read_matrix(matfile_A, A_local, dim_A, dim_A_local, me, q);
 	read_matrix(matfile_B, B_local, dim_B, dim_B_local, me, q);
 
-#ifdef DEBUG
+	DEBUGPRINT("proc %d: successfully read matrices\n", me);
+
 	for (int i=0; i<dim_A_local[0]*dim_A_local[1]; ++i)
 	{
 		DEBUGPRINT("proc %d A[%d]=%lf\n", me, i, A_local[i]);
 	}
-	for (int i=0; i<dim_B_local[0]*dim_B_local[1]; ++i)
-	{
-		DEBUGPRINT("proc %d B[%d]=%lf\n", me, i, B_local[i]);
-	}
-#endif
+//	for (int i=0; i<dim_B_local[0]*dim_B_local[1]; ++i)
+//	{
+//		DEBUGPRINT("proc %d B[%d]=%lf\n", me, i, B_local[i]);
+//	}
 
 	// allocate c_local and initialize it to zeros
 	C_local = (double*)malloc(sizeof(double)*dim_A_local[0]*dim_B_local[1]);
