@@ -190,7 +190,6 @@ void read_matrix(
 				}
 			}
 		}
-		free(buffer);
 	}
 	else
 	// recieve local rows
@@ -236,16 +235,12 @@ void write_matrix(
 	MPI_Status status;
 	double * tmp;
 	// PERFORM OUTPUT
+	tmp = malloc(sizeof(double)*q*dim_local[1]);
 	if ( me == 0 )
 	// print matrix C dimensions
 	{
 		fprintf(file, "%d\n", dim[0]);
 		fprintf(file, "%d\n", dim[1]);
-		tmp = malloc(sizeof(double)*dim[1]);
-	}
-	else if ( grid_index[1] == 0 )
-	{
-		tmp = malloc(sizeof(double)*dim[1]);
 	}
 
 	if ( grid_index[0] == 0 )
@@ -273,24 +268,31 @@ void write_matrix(
 		{
 			for (int i=0; i<dim_local[0]; ++i)
 			{
-				MPI_Gather(&mat_local[i*dim_local[1]], dim_local[1], MPI_DOUBLE, tmp, dim_local[1], MPI_DOUBLE, 0, row_comm);
-				if ( grid_index[1] == 0 )
-				// send row to proc 0
+				if ( dim[0] > block_row*dim_local[0]+i )
 				{
-					int row_num = i+block_row*dim_local[0];
-					MPI_Send(tmp, dim[1], MPI_DOUBLE, 0, row_num, col_comm);
+					MPI_Gather(&mat_local[i*dim_local[1]], dim_local[1], MPI_DOUBLE, tmp, dim_local[1], MPI_DOUBLE, 0, row_comm);
+					if ( grid_index[1] == 0 )
+					// send row to proc 0
+					{
+						int row_num = i+block_row*dim_local[0];
+						MPI_Send(tmp, dim[1], MPI_DOUBLE, 0, row_num, col_comm);
+					}
 				}
 			}
 		}
-		else if ( grid_index[1] == 0 )
+		else if ( me == 0 )
 		// recieve individual rows from proc block_row
 		{
 			for (int i=0; i<dim_local[0]; ++i)
 			{
-				MPI_Recv(tmp, dim[1], MPI_DOUBLE, block_row, i+block_row*dim_local[0], col_comm, &status);
-				for (int j=0; j<dim[1]; ++j)
+				if ( dim[0] > block_row*dim_local[0]+i )
 				{
-					fprintf(file, "%lf\n", tmp[j]);
+					MPI_Recv(tmp, dim[1], MPI_DOUBLE, block_row, i+block_row*dim_local[0], col_comm, &status);
+					DEBUGPRINT("printing row %d\n", block_row*dim_local[0]+i);
+					for (int j=0; j<dim[1]; ++j)
+					{
+						fprintf(file, "%lf\n", tmp[j]);
+					}
 				}
 			}
 		}
