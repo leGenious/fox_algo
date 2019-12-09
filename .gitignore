@@ -8,3 +8,6 @@ c.txt_result
 fox_algo
 compile_commands.json
 check.m
+plot.py
+strong_scaling_blas_comparison.png
+*.log

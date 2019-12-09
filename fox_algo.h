@@ -60,6 +60,7 @@ void fox_matmulmat(double* C_local, // [out] output local matrix
 		// do multiplication
 		if ( grid_index[1] != root )
 		{
+#ifndef NOBLAS
 		cblas_dgemm(CblasRowMajor,
 				CblasNoTrans,
 				CblasNoTrans,
@@ -74,6 +75,20 @@ void fox_matmulmat(double* C_local, // [out] output local matrix
 				1,
 				C_local,
 				dim_local[2]);
+#endif
+#ifdef NOBLAS
+		for (int i=0; i<dim_local[0]; ++i)
+		{
+			for (int j=0; j<dim_local[2]; ++j)
+			{
+				for (int k=0; k<dim_local[1]; ++k)
+				{
+					// C[i,j] += A[i,k]*B[k,j]
+					C_local[i*dim_local[2]+j] = tmp[i*dim_local[1]+k]*B_local[k*dim_local[2]+j];
+				}
+			}
+		}
+#endif
 		}
 		else
 		{
@@ -92,6 +107,19 @@ void fox_matmulmat(double* C_local, // [out] output local matrix
 				C_local,
 				dim_local[2]);
 		}
+#ifdef NOBLAS
+		for (int i=0; i<dim_local[0]; ++i)
+		{
+			for (int j=0; j<dim_local[2]; ++j)
+			{
+				for (int k=0; k<dim_local[1]; ++k)
+				{
+					// C[i,j] += A[i,k]*B[k,j]
+					C_local[i*dim_local[2]+j] = A_local[i*dim_local[1]+k]*B_local[k*dim_local[2]+j];
+				}
+			}
+		}
+#endif
 		// do circular shift of B_local upwards
 		int source = (grid_index[0]+1)%q;
 		int dest = (grid_index[0]-1+q)%q;
@@ -288,7 +316,6 @@ void write_matrix(
 				if ( dim[0] > block_row*dim_local[0]+i )
 				{
 					MPI_Recv(tmp, dim[1], MPI_DOUBLE, block_row, i+block_row*dim_local[0], col_comm, &status);
-					DEBUGPRINT("printing row %d\n", block_row*dim_local[0]+i);
 					for (int j=0; j<dim[1]; ++j)
 					{
 						fprintf(file, "%lf\n", tmp[j]);
