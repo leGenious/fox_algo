@@ -1,4 +1,5 @@
 tags
+*.tgz
 timings.log
 A.txt
 B.txt

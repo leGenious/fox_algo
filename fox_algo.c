@@ -1,6 +1,24 @@
 #include "fox_algo.h"
 
-// TODO: make program work for matrices nxm where ( (n % q) != 0 ) || ( (m % q) != 0)
+/*
+ * @Program fox_algo.c
+ * @author Daniel Walsken
+ * @desc This program reads in two matrices from text files, computes the
+ * matrix matrix product in parallel using fox' algorithm and writes the
+ * resulting matrix to a file.
+ * Due to the algorithm used here, it requires a square number of processors.
+ * In case the dimensions of the matrix are not evenly divisible by the square
+ * root of the number of processes, the program tries filling the matrix with
+ * zeros to make the dimension divisible.
+ * @date 09.12.2019
+ * @version 0.1
+ *
+ * TODO: find out why it does not work for nprocs=25 and results in double free
+ * or corruption at the very end.
+ * (The program worked fine for all matrices I've tried up to 16 processors)
+ * (This final todo is probably beyond the scope of the exercise, so I am just
+ * submitting this now)
+ */
 
 int main(int argc, char** argv)
 {
